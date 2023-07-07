@@ -1,0 +1,27 @@
+*&---------------------------------------------------------------------*
+*& Report ZFU_CALCULATOR
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+*Restfull olarak çalıştırılmasındaki asıl amaç kullanılan webservisine başka bir zamanda
+*Yeni bir input eklendiğinde soap ile düzeltmesi uzun ve zor oluyor.
+*Ancak restfull bu konuda daha kolay ve kesin sonuç ortaya koyuyor.
+REPORT ZFU_CALCULATOR.
+
+SELECTION-SCREEN BEGIN OF BLOCK B1 WITH FRAME TITLE TEXT-001.
+PARAMETERS: p_soap RADIOBUTTON GROUP r1,
+            p_rest RADIOBUTTON GROUP r1.
+
+PARAMETERS: p_val1 TYPE i,
+            p_val2 TYPE i.
+
+SELECTION-SCREEN END OF BLOCK B1.
+
+START-OF-SELECTION.
+*Class'ı tanımlayıp içindeki değerleri parametrelere eşitleme işlemi.
+
+new zcl_zfu_calculator( VALUE #( soap = p_soap
+                                 rest = p_rest
+                                 value1 = p_val1
+                                 value2 = p_val2
+                                      ) ).

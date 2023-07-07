@@ -1,0 +1,198 @@
+CLASS zcl_zfu_calculator DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF ty_parm,
+             soap   TYPE xfeld,
+             rest   TYPE xfeld,
+             value1 TYPE i,
+             value2 TYPE i,
+           END OF ty_parm.
+
+    DATA: BEGIN OF state,
+            parm        TYPE ty_parm,
+            soap_result TYPE zfu_calculatoradd_soap_out,
+          END OF state.
+
+
+    METHODS exec.
+    METHODS xml_input
+      RETURNING VALUE(rv_xstring) TYPE xstring.
+    METHODS exec_soap.
+    METHODS exec_rest.
+    METHODS constructor
+      IMPORTING !is_parm TYPE ty_parm.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCL_ZFU_CALCULATOR IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_ZFU_CALCULATOR->CONSTRUCTOR
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_PARM                        TYPE        TY_PARM
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD constructor.
+    CLEAR state.
+    state-parm = is_parm.
+    exec( ).
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_ZFU_CALCULATOR->EXEC
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD exec.
+
+    CASE abap_true.
+      WHEN state-parm-soap.
+        exec_soap( ).
+      WHEN state-parm-rest.
+        exec_rest( ).
+      WHEN OTHERS.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_ZFU_CALCULATOR->EXEC_REST
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD exec_rest.
+* client oluştur
+* request oluştur
+* özelliklerini tanımla
+* gönder ve sonuçları al
+* kapat
+    TRY.
+        cl_http_client=>create_by_url( EXPORTING url = 'http://dneonline.com/calculator.asmx'
+                                       IMPORTING client = DATA(lo_client) ).
+
+        DATA(lv_input) = xml_input( ).
+
+*Content-Type: text/xml;charset=UTF-8
+*SOAPAction: "http://tempuri.org/Add"
+*Content-Length: 291
+    DATA(lv_xlen) = xstrlen( lv_input ).
+       data: lv_len type string.
+       lv_len = lv_xlen.
+       CONDENSE lv_len.
+lo_client->request->set_header_field( name = 'Content-Type' value = 'text/xml;charset=UTF-8').
+lo_client->request->set_header_field( name = 'SOAPAction' value = 'http://tempuri.org/Add').
+lo_client->request->set_header_field( name = 'Content-Length' value = lv_len ).
+
+lo_client->request->set_data( lv_input ).
+lo_client->send( ).
+lo_client->receive( ).
+lo_client->response->get_status( IMPORTING code = data(lv_code)
+                                           reason = data(lv_reason) ).
+data(lv_output) = lo_client->response->get_cdata( ).
+
+DATA: lv_xstring type xstring,
+      lt_xml type TABLE of SMUM_XMLTB,
+      lt_return TYPE TABLE OF BAPIRET2.
+
+CALL FUNCTION 'SCMS_STRING_TO_XSTRING'
+  EXPORTING
+    text           = lv_output
+*   MIMETYPE       = ' '
+   ENCODING       = '4110'
+ IMPORTING
+   BUFFER         = lv_xstring
+ EXCEPTIONS
+   FAILED         = 1
+   OTHERS         = 2
+          .
+IF sy-subrc <> 0.
+* Implement suitable error handling here
+ENDIF.
+
+
+CALL FUNCTION 'SMUM_XML_PARSE'
+  EXPORTING
+    xml_input       = lv_xstring
+  tables
+    xml_table       = lt_xml
+    return          = lt_return
+          .
+READ TABLE lt_xml into data(ls_xml) with key cname = 'AddResult'.
+IF sy-subrc eq 0.
+  MESSAGE i001(ls) WITH ls_xml-cvalue.
+
+ENDIF.
+
+      CATCH cx_root INTO DATA(lx_root).
+        MESSAGE lx_root->if_message~get_text( ) TYPE 'I' DISPLAY LIKE 'E'.
+
+    ENDTRY.
+
+
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_ZFU_CALCULATOR->EXEC_SOAP
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD exec_soap.
+* Kodun try catch içerisine sokulmasının amacı bir hata varsa hata kodu olarak göstermesi
+* Aşağıdaki oluşturulan yeni class service consumer oluşturulduktan sonra default olarak oluşmuş bir class'tır
+* Aşağıdaki işlem webservice'ye ait olarak default oluşan class'ın içindeki import ve exportları tanımlamaktır.
+* Aşağıdaki method sadece soap yöntemi içindir.
+
+    TRY.
+        NEW zfu_calculatorco_calculator_so( logical_port_name = 'DEFAULT' )->add(
+                                                EXPORTING input = VALUE #( int_a = state-parm-value1
+                                                                           int_b = state-parm-value2 )
+                                                IMPORTING output = state-soap_result
+                                                                                      ).
+        MESSAGE i001(ls) WITH state-soap_result-add_result.
+      CATCH cx_root INTO DATA(lx_root).
+        MESSAGE lx_root->if_message~get_text( ) TYPE 'I' DISPLAY LIKE 'E'.
+    ENDTRY.
+
+
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_ZFU_CALCULATOR->XML_INPUT
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] RV_XSTRING                     TYPE        XSTRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+METHOD xml_input.
+*Web servisten çekilen xml verilerini string'e çevirme işlemi ve webserviste bulunan kullanıcı parametrelerini belirtmek
+    DATA: lv_string TYPE string.
+    lv_string =
+      |   <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/"> | &&
+      |      <soapenv:Header/>  | &&
+      |      <soapenv:Body>  | &&
+      |         <tem:Add>  | &&
+      |            <tem:intA>{ state-parm-value1 }</tem:intA>  | &&
+      |            <tem:intB>{ state-parm-value2 }</tem:intB>  | &&
+      |         </tem:Add>  | &&
+      |      </soapenv:Body> | &&
+      |   </soapenv:Envelope> |.
+
+CALL FUNCTION 'CRM_IC_XML_STRING2XSTRING'
+  EXPORTING
+    instring         = lv_string
+ IMPORTING
+   OUTXSTRING       = rv_xstring
+          .
+
+
+
+  ENDMETHOD.
+ENDCLASS.
